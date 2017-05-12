@@ -94,17 +94,19 @@ public class TapOutUpdate {
 		}		
 	}
 	
+	static long connectTime = 0;
+	
 	public void run() {
 		logger.info("program runing...");
 		
 		try {
-			createConnection();
-			
 			chtIMSIs.clear();
 			voiceDatas.clear();
 			messageDatas.clear();
 			dataDatas.clear();
 			loadFile();
+			
+			createConnection();
 			
 			IMSIMap.clear();
 			S2TIMSItoSeriveidList.clear();
@@ -130,17 +132,22 @@ public class TapOutUpdate {
 				errorHandle(e1);
 			}
 		}finally{
-			closeConnection();
+			
 		}
 		
 		logger.info("program finished...");
 	}
 	
 	
-	public void updateDatas() throws ParseException, SQLException{
+	
+	public void updateDatas() throws ParseException, SQLException, ClassNotFoundException{
 
 		logger.info("updateDatas...");
 		
+		if(System.currentTimeMillis()-connectTime>1000*60*20){
+			reconnect();
+		}
+
 		String sql = "select TAPOUTFILE_ID.NEXTVAL ID from dual ";
 		logger.info("Execute SQL:"+sql);
 		rs = st.executeQuery(sql);
@@ -263,6 +270,8 @@ public class TapOutUpdate {
 		String s2tIMSI = IMSIMap.get(chtIMSI);
 		String serviceid = null;
 		if(S2TIMSItoSeriveidList.containsKey(s2tIMSI)){
+			//檢查符合條件是否為唯一
+			int count = 0;
 			for(Map<String,String> m: S2TIMSItoSeriveidList.get(s2tIMSI)){
 				String startTime = m.get("START");
 				String endTime = m.get("END");
@@ -271,17 +280,21 @@ public class TapOutUpdate {
 //				logger.info(startTime);
 //				logger.info(endTime);
 //				logger.info(startTimeD.compareTo(useTimeD));
-
-				if(startTimeD.compareTo(useTimeD)<=0 && endTime == null ||"".equals(endTime) || sdf2.parse(endTime).compareTo(useTimeD)>0){
+				if(startTimeD.compareTo(useTimeD)<=0 && (endTime == null ||"".equals(endTime) || sdf2.parse(endTime).compareTo(useTimeD)>0)){
 					serviceid = m.get("SERVICEID");
-					break;
+					count++;
+					//break;
 				}
+			}
+			if(count>1){
+				serviceid = null;
+				logger.error("For IMSI "+chtIMSI+" was found more than one serviceId at time "+useTime);
 			}
 		}
 		return new String[] {serviceid,s2tIMSI};
 	}
 	
-	public void queryIMSIdatas() throws SQLException{	
+	public void queryIMSIdatas() throws SQLException, ClassNotFoundException{	
 		String imsis = "";
 		
 		int i = 0; 
@@ -302,8 +315,13 @@ public class TapOutUpdate {
 		
 	}
 	
-	public void setMaps(String imsis) throws SQLException{
+	public void setMaps(String imsis) throws SQLException, ClassNotFoundException{
 		logger.info("Map setting...");
+		
+		if(System.currentTimeMillis()-connectTime>1000*60*20){
+			reconnect();
+		}
+		
 		String s2tImsis = "";
 		//設定HomeIMSI 與 S2TIMSI對應
 		String sql = "select A.imsi,A.homeimsi,A.SERVICEID,A.CREATEDATE from imsi A where A.homeimsi in ("+imsis+")";
@@ -317,8 +335,12 @@ public class TapOutUpdate {
 		
 		s2tImsis = s2tImsis.substring(0, s2tImsis.length()-1);
 		
+		if(System.currentTimeMillis()-connectTime>1000*60*20){
+			reconnect();
+		}
+		
 		//設定Service ID 使用 IMSI 的區間
-		sql = "	Select A.IMSI,A.SERVICEID,"
+/*		sql = "	Select A.IMSI,A.SERVICEID,"
 				+ "to_char(A.START_TIME,'yyyyMMddhh24miss') START_TIME,"
 				+ "to_char(B.END_TIME,'yyyyMMddhh24miss') END_TIME "
 				+ "from (	select IMSI,START_TIME,SERVICEID "
@@ -337,7 +359,34 @@ public class TapOutUpdate {
 				+ "			from SERVICEINFOCHANGEORDER A, SERVICEORDER B "
 				+ "			WHERE A.FIELDID=3713 and A.COMPLETEDATE is not null AND A.ORDERID=B.ORDERID AND OLDVALUE in ("+s2tImsis+") "
 				+ "		) B "
-				+ "WHERE A.IMSI = B.IMSI(+) AND A.SERVICEID = B.SERVICEID(+) AND A.START_TIME<B.END_TIME(+) ";
+				+ "WHERE A.IMSI = B.IMSI(+) AND A.SERVICEID = B.SERVICEID(+) AND A.START_TIME<B.END_TIME(+) ";*/
+		
+		sql = ""
+				+ "select distinct A.IMSI,A.SERVICEID,A.START_TIME,NVL(A.END_TIME,B.END_TIME) END_TIME "
+				+ "from(	Select A.IMSI,A.SERVICEID,to_char(A.START_TIME,'yyyyMMddhh24miss') START_TIME , to_char( min(B.END_TIME),'yyyyMMddhh24miss') END_TIME "
+				+ "			from (	select IMSI,START_TIME,SERVICEID  "
+				+ "						from (	select A.NEWVALUE IMSI,A.COMPLETEDATE START_TIME,B.SERVICEID  "
+				+ "									from SERVICEINFOCHANGEORDER A, SERVICEORDER B "
+				+ "									WHERE A.FIELDID=3713 and A.COMPLETEDATE is not null AND A.ORDERID=B.ORDERID  "
+				+ "									UNION ALL  "
+				+ "									select A.FIELDVALUE IMSI,A.COMPLETEDATE START_TIME,A.SERVICEID  "
+				+ "									from NEWSERVICEORDERINFO A "
+				+ "									WHERE a.fieldid=3713 and A.COMPLETEDATE is not null "
+				+ "								) "
+				+ "						WHERE IMSI in ("+s2tImsis+") "
+				+ "					) A,  "
+				+ "					(	select A.OLDVALUE IMSI,A.COMPLETEDATE END_TIME,B.SERVICEID "
+				+ "						from SERVICEINFOCHANGEORDER A, SERVICEORDER B "
+				+ "						WHERE A.FIELDID=3713 and A.COMPLETEDATE is not null AND A.ORDERID=B.ORDERID AND OLDVALUE in ("+s2tImsis+") "
+				+ "					) B "
+				+ "			WHERE A.IMSI = B.IMSI(+) AND A.SERVICEID = B.SERVICEID(+) AND A.START_TIME<B.END_TIME(+) "
+				+ "			GROUP BY A.IMSI,A.SERVICEID,A.START_TIME "
+				+ "		) A ,"
+				+ "		(	select serviceid,to_char(datecanceled,'yyyyMMddhh24miss')  END_TIME "
+				+ "			from service "
+				+ "			where datecanceled is not null "
+				+ "		) B "
+				+ "where A.serviceid = B.serviceid(+) ";
 		
 		logger.info("Execute SQL:"+sql);
 		rs = st2.executeQuery(sql);
@@ -513,6 +562,8 @@ public class TapOutUpdate {
 	
 	void createConnection() throws SQLException, ClassNotFoundException{
 		logger.info("createConnection...");
+		connectTime = System.currentTimeMillis();
+		
 		String url,DriverClass,UserName,PassWord;
 		
 		url=props.getProperty("Oracle.URL")
@@ -579,7 +630,19 @@ public class TapOutUpdate {
 				conn2.close();
 			} catch (SQLException e) {
 			}	
+		
+		rs = null;
+		st = null;
+		conn = null;
+		st2=null;
+		conn2 = null;
+		
 		logger.info("closeConnection Success!");
+	}
+	
+	public void reconnect() throws SQLException, ClassNotFoundException{
+		closeConnection();
+		createConnection();
 	}
 	
 	void errorHandle(Exception e){
