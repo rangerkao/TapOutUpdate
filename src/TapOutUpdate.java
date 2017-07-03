@@ -84,7 +84,7 @@ public class TapOutUpdate {
 		initialLog4j();
 		
 		if(testMod){
-			//args = new String[]{"Charge Detail For Export (final table)_1962.txt"};
+			args = new String[]{"CDHKGBMTWNLD02195"};
 		}
 		
 		if(args.length == 1){
@@ -183,12 +183,13 @@ public class TapOutUpdate {
 
 			if(serviceid == null) serviceIdNullSet.add(chtIMSI);
 				
+			//20171115 mod 增加 TELESERVICECODE 資料
 			sql = "insert into TAPOUTFILEVOICEUSAGE ("
 					+ "FILEID,EVENTNO,CALLER,CALLEE,STARTTIME,"
-					+ "DURATION,CHARGEUNIT,DIRECTION,IMSI,LOCATION,AMOUNT,SERVICEID) "
+					+ "DURATION,CHARGEUNIT,DIRECTION,IMSI,LOCATION,AMOUNT,SERVICEID,TELESERVICECODE) "
 					+ "values("
 					+ fileID+","+m.get("EventNo")+",'"+m.get("Caller")+"','"+m.get("Callee")+"',to_date('"+m.get("StartTime")+"','yyyy-MM-dd hh24:mi:ss'),"
-					+ m.get("Duration")+","+m.get("ChargeUnit")+",'"+m.get("Direction")+"','"+s2tIMSI+"','"+m.get("Location")+"',"+m.get("Amount")+","+serviceid+")";			
+					+ m.get("Duration")+","+m.get("ChargeUnit")+",'"+m.get("Direction")+"','"+s2tIMSI+"','"+m.get("Location")+"',"+m.get("Amount")+","+serviceid+",'"+m.get("TeleServiceCode")+"')";			
 			
 			if(i==0){
 				logger.info("First SQL:"+sql);
@@ -450,6 +451,9 @@ public class TapOutUpdate {
 				String 	Duration = data[columnMap.get("Duration")];
 				String 	Location = data[columnMap.get("Operator Spec. Info")].replaceAll("'", "");
 				
+				//20171115 ADD
+				String TeleServiceCode = data[columnMap.get("Service Code")].replaceAll("'", "");
+				
 				 if("X".equalsIgnoreCase(chargedItem)){
 					//數據
 					Caller = data[columnMap.get("Msisdn")].replaceAll("'", "");
@@ -459,8 +463,11 @@ public class TapOutUpdate {
 					ChargeUnit = new BigDecimal(Double.valueOf(data[columnMap.get("Chargeable Units")])/1024).setScale(0, BigDecimal.ROUND_CEILING).toString();
 					
 					//ChargeUnit = String.valueOf(Math.ceil(Double.valueOf(data[columnMap.get("Chargeable Units")])/1024));
-					String UploadVolume = data[columnMap.get("Data Volume Outgoing")].replaceAll("'", "");
-					String DownloadVolume = data[columnMap.get("Data Volume Incoming")].replaceAll("'", "");
+					String UploadVolume = data[columnMap.get("Vol. Outg.")].replaceAll("'", "");
+					String DownloadVolume = data[columnMap.get("Vol. Inc.")].replaceAll("'", "");
+					
+					//String UploadVolume = data[columnMap.get("Data Volume Outgoing")].replaceAll("'", "");
+					//String DownloadVolume = data[columnMap.get("Data Volume Incoming")].replaceAll("'", "");
 					 
 					//logger.info(EventNo+","+Caller+","+StartTime+","+Duration+"."+UploadVolume+","+DownloadVolume+","+ChargeUnit+","+IMSI+","+Location+","+Amount);
 
@@ -509,6 +516,9 @@ public class TapOutUpdate {
 						m.put("IMSI", IMSI);
 						m.put("Location", Location);
 						m.put("Amount", Amount);
+						//20171115
+						m.put("TeleServiceCode", TeleServiceCode);
+						
 						voiceDatas.add(m);
 						 
 						}else if("E".equalsIgnoreCase(chargedItem)){
