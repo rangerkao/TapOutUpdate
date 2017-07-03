@@ -459,8 +459,11 @@ public class TapOutUpdate {
 					ChargeUnit = new BigDecimal(Double.valueOf(data[columnMap.get("Chargeable Units")])/1024).setScale(0, BigDecimal.ROUND_CEILING).toString();
 					
 					//ChargeUnit = String.valueOf(Math.ceil(Double.valueOf(data[columnMap.get("Chargeable Units")])/1024));
-					String UploadVolume = data[columnMap.get("Data Volume Outgoing")].replaceAll("'", "");
-					String DownloadVolume = data[columnMap.get("Data Volume Incoming")].replaceAll("'", "");
+					String UploadVolume = data[columnMap.get("Vol. Outg.")].replaceAll("'", "");
+					String DownloadVolume = data[columnMap.get("Vol. Inc.")].replaceAll("'", "");
+					
+					//String UploadVolume = data[columnMap.get("Data Volume Outgoing")].replaceAll("'", "");
+					//String DownloadVolume = data[columnMap.get("Data Volume Incoming")].replaceAll("'", "");
 					 
 					//logger.info(EventNo+","+Caller+","+StartTime+","+Duration+"."+UploadVolume+","+DownloadVolume+","+ChargeUnit+","+IMSI+","+Location+","+Amount);
 
